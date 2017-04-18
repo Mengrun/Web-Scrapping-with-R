@@ -1,0 +1,208 @@
+
+## Task 1 - Scraping La Quinta
+This task intends to scrape the information of each La Quinta in the USA. Information scraped includes:
+1. basic info: location name, street address, phone numbers, fax number, longitude and latitude,
+2. amenities and services: internet, swimming pool and breakfast availability,
+3. hotel details: number of floors, rooms and suites.
+
+Step 1:
+Via R script get_lq.R, We first download and locally save the html files of each La Quinta in the USA  under "data/lq/".
+
+Step 2:
+In this step, detailed information of each La Quinta is scraped and stored in a data frame, which is saved as an R data file "data/lq.RData" for distance analysis. 
+
+The data frame includes 851 rows and 12 columns. The 851 rows correspond to all La Quinta hotels in the USA. The 12 columns correspond to the information of each La Quinta hotel, which are: title, address, phone numbers, fax numbers, latitude, longitude, internet availability, swimming pool availability, breakfast availability, # of floors, # of rooms and # of suites. 
+
+To extract data of each hotel, we apply function "extract_data" to each html file and thus "a row" of information in the data frame is obtained. In the end, "rows" are combined using function "do.call(rbind, l)". As a result, a data frame containing information of all La Quintas' is created. Note that the pipe operator ("%>%") is used extensively to facilitate information extraction, since we are approaching the particular information step by step. 
+
+The idea of extracting data is i) first reading the html file, ii) using functions html_nodes, html_text, str_detect, str_replace etc. to extract the information we are interested in. 
+
+First read the html from the file downloaded. Since we are interested in the information (i.e. hotel names, address, phone numbers etc.) contained in the node ".hotelDetailsBasicInfoTitle", we extract information by the following commands:
+```{r, eval = FALSE}
+d = read_html(url)
+titles = html_nodes(d,".hotelDetailsBasicInfoTitle")
+x = titles[[1]]
+```
+Second, apply html and string functions to extract particular information we require. Sample codes of lat-long extraction are attached for demonstration:
+```{r, eval = FALSE}
+lat_long = html_nodes(d, ".minimap") %>% 
+            html_attr("src") %>%
+            str_match(pattern = "[0-9]{2}[.][0-9]{2, },-[0-9]{2,3}[.][0-9]{2, }") %>%
+            str_split(pattern=",")
+df$lat = unlist(lat_long)[1] %>%
+        as.numeric()
+df$long = unlist(lat_long)[2] %>%
+          as.numeric()
+```
+Latitude and longitude information is identified to be wrapped in the node ".minimap" with attributes "src" using "developer tools". e.g. La Quinta Acworth ("http://www.lq.com/en/findandbook/hotel-details.acworth.html"). Html codes related to latitude and longitude are:
+```{r eval = FALSE}
+"<img src="http://maps.google.com/maps/api/staticmap?zoom=15&amp;markers=icon:http://d6uatprod.lq.com/lq/images/mapquest/orange.gif|34.082039,-84.656087&amp;size=223x223&amp;maptype=roadmap&amp;client=gme-lqmanagementllc&amp;sensor=false&amp;signature=VLjvfwMjdyhgkp2uzlJm4jMX_Lk=" class="minimap">"
+```
+
+The two numeric values (Latitude) 34.082039 and (longitude) -84.656087 are what we are looking for. After trial and errors, we recognise latitudes and longitudes to have the universal pattern that latitude start with 2 digits, followed by "." and then two or more digits... Hence, apply function "str_match(pattern = "[0-9]{2}[.][0-9]{2, },-[0-9]{2,3}[.][0-9]{2, }")". Further steps are conducted to separate the two values and convert to class of numeric. 
+
+Similar approaches are used when identifying and extracting other information of interests. 
+
+## Task 2 - Scraping Denny's 
+
+This task intends to scrape the information of each Dennys in the USA. Information scraped includes these eight items: street address, city, state, country, phone number, postalcode, longitude and latitude.
+
+Step 1:
+Because we could not get any information on Dennys website like LQ, we need to use a 3rd party service to get these information, which is Where2GetIt web API. Using this API, we could search the above information of Dennys by giving a center location and a radius. We took eight locations and made the radius as 3000, which could include the mainland of US in it. But the seaching could give us 1000 Dennys closest to the searching center at most. So, at here, to cover the US, we made 8 coordinates, which are located at FL, NJ, CA, WA, MN, TX, AK and HI to cove all over the US, including the Alaska and Hawaii. Then, we download these 8 xmls.
+
+Step 2:
+In this step, detailed information of each Dennys is scraped and stored in a data frame, which is saved as an R data file "data/dennys.RData" for distance analysis. 
+
+The data frame includes 1628 rows and 8 columns. The 1628 rows correspond to all Dennys in the USA. The 8 columns correspond to the information of each Dennys as above, which are: street address, city, state, country, phone number, postalcode, longitude and latitude.
+
+To extract data of each Dennys, we make a function to create 8 data frames in a list. And we store the information from the 8 xmls in these 8 data frames. Also, by searching Dennys, we also get some information of Dennys in CA and MX, which we do not need. Thus, we used 
+```{r, eval = FALSE}
+countryS <- str_match(data,"<country>.*</country>")
+Dennys_US <- data[countryS == "<country>US</country>"]
+```
+to select the Dennys in US and store them in Dennys_US.
+
+Then we used a for loop to read each xml and to extract the information in it. First, we know that in the xml, the address is included in "<address1>.*</address1>". Thus, we thought about remove the beginning and the ending of the address line in xml to get the real address of each Dennys. Also, we do the same thing to extract the city information.
+
+```{r, eval = FALSE}
+address <- str_extract_all(Dennys_US,'<address1>.*</address1>') %>% 
+    str_replace_all("<address1>","") %>% 
+    str_replace_all("</address1>","")
+
+city <- str_extract_all(Dennys_US,'<city>.*</city>') %>% 
+    str_replace_all("<city>","") %>% 
+    str_replace_all("</city>","")
+```
+
+The second way to extract information is by the certain mode of the information. We know that the state information could be matched by two upper letters. And, the country, phone numbers, postalcode, longitude and latitude are also taking a certain mode, which could be matched by the code as follows.
+
+```{r, eval = FALSE}
+state <- str_extract_all(Dennys_US,'<state>.*</state>') %>% 
+    str_extract_all('([A-Z]{2})')
+
+country <- str_extract_all(Dennys_US,'<country>.*</country>') %>% 
+    str_extract_all('([A-Z]{2})')
+
+phone <- str_extract_all(Dennys_US,'<phone>.*</phone>') %>% 
+    str_extract_all('[\\(]([2-9][0-9]{2})[\\)][- .]([0-9]{3})[- .]([0-9]{4})')
+
+postalcode <- str_extract_all(Dennys_US,'<postalcode>.*</postalcode>') %>% 
+    str_extract_all('([0-9]{5})')
+  
+lat <- str_extract_all(Dennys_US,'<latitude>.*</latitude>') %>% 
+    str_extract_all('([0-9]{1,})([.]{0,})([0-9]{1,})')
+
+long <- str_extract_all(Dennys_US,'<longitude>.*</longitude>') %>% 
+    str_extract_all('([-][0-9]{1,})([.]{0,})([0-9]{1,})')
+  
+```
+
+Then we use "rbind" to these data frames from each xml together to get a whole data frame of Dennys, which has repeat. Then, we used "unique" function to remove the repeat and use "save" function to save it as RData.
+
+```{r eval = FALSE}
+dennys <- unique(dennys)
+
+save(dennys, file = "data/dennys.RData")
+```
+
+## Task 3 - Distance Analysis
+```{r}
+install.packages("ggplot2")
+install.packages("ggmap")
+library(ggplot2)
+library(ggmap)
+lq<-load("data/lq.RData")
+denny<-load("data/dennys.RData")
+names(lq.info)
+names(dennys)
+#get the latitude and longitude of dennys
+dennys.latlong<-data.frame(lat=as.numeric(dennys$lat),long=as.numeric(dennys$long))
+#plot LQ and Dennys on googlemap
+map1<-qmap("United States",zoom=4,source="google",maptype="roadmap")
+map1+geom_point(aes(x=long,y=lat),data=lq.info,col="red")
+map1+geom_point(aes(x=long,y=lat),data=dennys.latlong,col="blue")
+map1+geom_point(aes(x=long,y=lat),data=lq.info,col="red")+
+  geom_point(aes(x=long,y=lat),data=dennys.latlong,col="blue")
+```
+From the above plot, we can see there are many La Quinta hotels in Texas, where La Quinta was founded. La Quinta hotels are mainly located in southern and eastern USA. In the middle of USA, there are not many LQ hotels. But in Califonia, there are also many LQ hotels.  
+From the plot of Dennys, we can see that Dennys are also mainly located in eastern USA and there are a lot of Dennys hotels in California. The same as LQ hotels, there are not many Dennys situated in the middle of USA.  
+  
+Now we will calculate the distance between each La Quinta and Dennys to see whether they always next to each other.
+```{r}
+lq<-load("data/lq.RData")
+denny<-load("data/dennys.RData")
+#get the latitude and longitude of dennys
+dennys.latlong<-data.frame(lat=as.numeric(dennys$lat),
+                     long=as.numeric(dennys$long))
+# Convert degrees to radians
+deg2rad <- function(deg) return(deg * pi / 180)
+
+# Calculate the geodesic distance between two points specified 
+# by radian latitude/longitude using the
+# Haversine formula (hf). Compared to approach "The Spherical Law of Cosines",
+# it is more robust 
+# in calculating small distances.
+gcd.hf <- function(long1, lat1, long2, lat2) {
+  R <- 6371 # Earth mean radius [km]
+  long1.rad <- deg2rad(long1)
+  long2.rad <- deg2rad(long2)
+  lat1.rad <- deg2rad(lat1)
+  lat2.rad <- deg2rad(lat2)
+  delta.long <- (long2.rad - long1.rad)
+  delta.lat <- (lat2.rad - lat1.rad)
+  a <- sin(delta.lat/2)^2 + cos(lat1.rad) * cos(lat2.rad) * sin(delta.long/2)^2
+  c <- 2 * asin(min(1,sqrt(a)))
+  d = R * c
+  return(d) # Distance in km
+}
+dennys.nearlq<-function(radius){
+  match1<-NULL
+  distance<-matrix(0,nrow=length(lq.info$lat),ncol=length(dennys.latlong$lat))
+  number<-0
+  colnames(distance) <- unlist(dennys$address)
+  for(i in 1:length(lq.info$lat)){
+    for(j in 1:length(dennys.latlong$lat)){
+      distance[i,j]<- gcd.hf(lq.info$long[i],lq.info$lat[i],dennys.latlong$long[j],
+                             dennys.latlong$lat[j])
+    }
+    match1[i] <- list(names(which(distance[i,]<=radius)))
+    number[i] <- length(which(distance[i,]<=radius))
+  }
+  return(c(number,match1))
+}
+a=dennys.nearlq(1)
+b=dennys.nearlq(3)
+c=dennys.nearlq(5)
+d=data.frame(as.vector(lq.info$title),lq.info$address,unlist(a[1:851]),
+             unlist(b[1:851]),unlist(c[1:851]))
+colnames(d)<-c("title of lq","address of lq","dennys in radius 1km","dennys in radius 3km","dennys in radius 5km")
+d
+#whether Dennys hotels are next to La Quinta within the given radius
+t<-data.frame(length(which(unlist(a[1:851])>0)),length(which(unlist(b[1:851])>0)),
+        length(which(unlist(c[1:851])>0)))
+colnames(t)<-c("radius 1km","radius 3km","radius 5km")
+t
+```
+We set the radius as 1km, 3km and 5km and count how many Dennys are closed to La Quinta within the radius. From the results shown above, we can see that when radius = 1km, there are only 188 out of 851 La Quinta hotels closed to Dennys. When radius = 3km, there are 316 out of 851 La Quinta hotels closed to Dennys. When radius = 5km, there are 425 out of 851 La Quinta hotels closed to Dennys. Therefore, although it seems that each La Quinta may be closed to a Dennys, actually it doesn't. But many La Quinta hotels do locate in the place near Dennys.  
+We can also see some samples of the addresses of LQ and the Dennys near it.
+```{r}
+#subset the address of Dennys that are within the radius=1km
+x=a[852:length(a)]
+names(x) <- lq.info$title
+x[1]
+x[146]
+x[366]
+#subset the address of Dennys that are within the radius=3km
+y=b[852:length(b)]
+names(y) <- lq.info$title
+y[1]
+y[250]
+y[600]
+#subset the address of Dennys that are within the radius=5km
+z=c[852:length(c)]
+names(z) <- lq.info$title
+z[1]
+z[300]
+z[800]
+```
+
